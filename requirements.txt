@@ -7,4 +7,5 @@ pandas==2.1.4
 numpy==1.26.3
 loguru==0.7.2
 apscheduler==3.10.4
-eventlet==0.35.1
+gevent==23.9.1
+gevent-websocket==0.10.1
