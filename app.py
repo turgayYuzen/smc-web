@@ -344,5 +344,5 @@ if __name__ == "__main__":
     scheduler.add_job(run_analysis, "interval", minutes=15, id="smc_analysis")
     scheduler.start()
 
-    port = int(os.environ.get("PORT", 8080))
-    socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", logger=False, engineio_logger=False)
+    port = int(os.environ.get("PORT", 5000))
+socketio.run(app, host="0.0.0.0", port=port, debug=False)
