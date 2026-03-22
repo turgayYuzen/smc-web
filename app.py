@@ -2,8 +2,7 @@
 app.py — Flask + SocketIO backend
 Her 15 dakikada bir SMC analizi yapar, WebSocket ile frontend'e iter.
 """
-from gevent import monkey
-monkey.patch_all()
+
 import time
 import threading
 import requests
@@ -346,4 +345,4 @@ if __name__ == "__main__":
     scheduler.start()
 
     port = int(os.environ.get("PORT", 5000))
-    socketio.run(app, host="0.0.0.0", port=port, debug=False)
+    socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", logger=False, engineio_logger=False)
