@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SMC Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="logo">
+    <span class="logo-icon">◈</span>
+    <span>SMC Bot</span>
+  </div>
+  <nav>
+    <a href="#" class="nav-item active" onclick="showPage('dashboard')">
+      <span class="nav-icon">▦</span> Dashboard
+    </a>
+    <a href="#" class="nav-item" onclick="showPage('signals')">
+      <span class="nav-icon">◎</span> Sinyaller
+    </a>
+    <a href="#" class="nav-item" onclick="showPage('analysis')">
+      <span class="nav-icon">◈</span> Analiz
+    </a>
+    <a href="#" class="nav-item" onclick="showPage('trades')">
+      <span class="nav-icon">◑</span> Tradeler
+    </a>
+  </nav>
+  <div class="sidebar-bottom">
+    <div class="live-dot"></div>
+    <span id="last-update">Bağlanıyor...</span>
+  </div>
+</div>
+
+<div class="main">
+
+  <div class="topbar">
+    <div class="page-title" id="page-title">Dashboard</div>
+    <div class="topbar-right">
+      <div class="symbol-tabs" id="symbol-tabs">
+        <button class="sym-btn active" onclick="selectSymbol('BTCUSDT')">BTC</button>
+        <button class="sym-btn" onclick="selectSymbol('ETHUSDT')">ETH</button>
+        <button class="sym-btn" onclick="selectSymbol('SOLUSDT')">SOL</button>
+        <button class="sym-btn" onclick="selectSymbol('BNBUSDT')">BNB</button>
+        <button class="sym-btn" onclick="selectSymbol('XRPUSDT')">XRP</button>
+      </div>
+      <button class="refresh-btn" onclick="requestAnalysis()">↻ Yenile</button>
+    </div>
+  </div>
+
+  <!-- DASHBOARD PAGE -->
+  <div id="page-dashboard" class="page active">
+
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-label">Bakiye</div>
+        <div class="metric-value" id="m-balance">$1,000</div>
+        <div class="metric-sub" id="m-balance-sub">Başlangıç</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Günlük PnL</div>
+        <div class="metric-value green" id="m-pnl">$0.00</div>
+        <div class="metric-sub" id="m-pnl-sub">0 trade bugün</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Win Rate</div>
+        <div class="metric-value" id="m-winrate">0%</div>
+        <div class="metric-sub" id="m-winrate-sub">0 / 0 trade</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Aktif Sinyal</div>
+        <div class="metric-value blue" id="m-signals">0</div>
+        <div class="metric-sub">şu an bekleyen</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Aktif sinyaller</div>
+        <div id="signals-list">
+          <div class="empty-state">Analiz bekleniyor...</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">HTF bias durumu</div>
+        <div id="bias-list">
+          <div class="empty-state">Veri yükleniyor...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Order blocks — <span id="ob-symbol">BTCUSDT</span></div>
+        <div id="ob-list">
+          <div class="empty-state">Sembol seç</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">SMC confluence dağılımı</div>
+        <div style="padding: 8px 0;">
+          <div class="bar-row">
+            <span class="bar-label">Score 4</span>
+            <div class="bar-track"><div class="bar-fill blue" id="bar-4" style="width:0%"></div></div>
+            <span class="bar-num" id="bv-4">0</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">Score 3</span>
+            <div class="bar-track"><div class="bar-fill teal" id="bar-3" style="width:0%"></div></div>
+            <span class="bar-num" id="bv-3">0</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">Score 2</span>
+            <div class="bar-track"><div class="bar-fill amber" id="bar-2" style="width:0%"></div></div>
+            <span class="bar-num" id="bv-2">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIGNALS PAGE -->
+  <div id="page-signals" class="page">
+    <div class="card full-card">
+      <div class="card-title">Tüm sinyaller</div>
+      <table class="data-table" id="signals-table">
+        <thead>
+          <tr>
+            <th>Sembol</th><th>Yön</th><th>Fiyat</th>
+            <th>SL</th><th>TP</th><th>RR</th><th>Score</th><th>Sebepler</th><th>Saat</th>
+          </tr>
+        </thead>
+        <tbody id="signals-tbody">
+          <tr><td colspan="9" class="empty-state">Sinyal bekleniyor...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ANALYSIS PAGE -->
+  <div id="page-analysis" class="page">
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Detaylı analiz — <span id="an-symbol">BTCUSDT</span></div>
+        <div id="analysis-detail">
+          <div class="empty-state">Sembol seç ve yenile butonuna bas</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">FVG bölgeleri</div>
+        <div id="fvg-list">
+          <div class="empty-state">Veri bekleniyor</div>
+        </div>
+      </div>
+    </div>
+    <div class="card full-card" style="margin-top:12px;">
+      <div class="card-title">Bias özeti — tüm semboller</div>
+      <table class="data-table">
+        <thead>
+          <tr><th>Sembol</th><th>Fiyat</th><th>HTF Bias</th><th>Zone</th><th>LTF Bias</th></tr>
+        </thead>
+        <tbody id="bias-tbody">
+          <tr><td colspan="5" class="empty-state">Yükleniyor...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TRADES PAGE -->
+  <div id="page-trades" class="page">
+    <div class="metrics-grid" style="margin-bottom:16px;">
+      <div class="metric-card">
+        <div class="metric-label">Toplam Trade</div>
+        <div class="metric-value" id="t-total">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Kazanan</div>
+        <div class="metric-value green" id="t-wins">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Kaybeden</div>
+        <div class="metric-value red" id="t-losses">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Toplam PnL</div>
+        <div class="metric-value" id="t-pnl">$0</div>
+      </div>
+    </div>
+    <div class="card full-card">
+      <div class="card-title">Trade geçmişi</div>
+      <table class="data-table">
+        <thead>
+          <tr><th>Tarih</th><th>Sembol</th><th>Yön</th><th>Giriş</th><th>Çıkış</th><th>PnL</th><th>Sonuç</th></tr>
+        </thead>
+        <tbody id="trades-tbody">
+          <tr><td colspan="7" class="empty-state">Henüz trade yok</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script src="/static/js/dashboard.js"></script>
+</body>
+</html>
