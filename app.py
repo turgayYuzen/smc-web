@@ -71,7 +71,7 @@ def fetch_klines(symbol: str, interval: str, limit: int = 200) -> pd.DataFrame:
             df[col] = df[col].astype(float)
         return df[["open", "high", "low", "close", "volume"]]
     except Exception as e:
-        logger.error(f"Veri çekme hatası {symbol}: {e}")
+        logger.error(f"Veri çekme hatası {symbol}: {type(e).__name__}: {e}")
         return pd.DataFrame()
 
 
