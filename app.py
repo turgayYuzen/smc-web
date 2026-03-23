@@ -89,120 +89,112 @@ def fetch_price(symbol: str) -> float:
 # ── SMC Analiz ──────────────────────────────────────────────────────────────
 
 def analyze_symbol(symbol: str) -> dict:
-    df_ltf = fetch_klines(symbol, LTF, limit=300)
-    df_htf = fetch_klines(symbol, HTF, limit=200)
+    try:
+        df_ltf = fetch_klines(symbol, LTF, limit=300)
+        df_htf = fetch_klines(symbol, HTF, limit=200)
 
-    if df_ltf.empty or df_htf.empty:
-        return {}
+        logger.info(f"{symbol} LTF: {len(df_ltf)} mum, HTF: {len(df_htf)} mum")
 
-    current_price = df_ltf["close"].iloc[-1]
-    atr = calculate_atr(df_ltf)
+        if df_ltf.empty or df_htf.empty:
+            logger.error(f"{symbol} veri bos geldi!")
+            return {}
 
-    # HTF Bias
-    htf = analyze_htf_bias(df_htf)
+        current_price = df_ltf["close"].iloc[-1]
+        atr = calculate_atr(df_ltf)
 
-    # LTF Market Structure
-    ms = analyze_market_structure(df_ltf, lookback=5)
+        htf = analyze_htf_bias(df_htf)
+        ms = analyze_market_structure(df_ltf, lookback=5)
+        obs = detect_order_blocks(df_ltf, lookback=50)
+        bullish_obs = [o for o in obs if o.ob_type == OBType.BULLISH]
+        bearish_obs = [o for o in obs if o.ob_type == OBType.BEARISH]
+        fvgs = detect_fvg(df_ltf, min_size_pct=0.0002)
+        bullish_fvgs = [f for f in fvgs if f.fvg_type == FVGType.BULLISH]
+        bearish_fvgs = [f for f in fvgs if f.fvg_type == FVGType.BEARISH]
+        liq_zones = detect_liquidity_zones(df_ltf, ms.swing_highs, ms.swing_lows)
 
-    # Order Blocks
-    obs = detect_order_blocks(df_ltf, lookback=50)
-    bullish_obs = [o for o in obs if o.ob_type == OBType.BULLISH]
-    bearish_obs = [o for o in obs if o.ob_type == OBType.BEARISH]
+        logger.info(f"{symbol} bias={htf.bias} zone={htf.price_zone} allows_long={htf.allows_long()} allows_short={htf.allows_short()}")
 
-    # FVG
-    fvgs = detect_fvg(df_ltf, min_size_pct=0.0002)
-    bullish_fvgs = [f for f in fvgs if f.fvg_type == FVGType.BULLISH]
-    bearish_fvgs = [f for f in fvgs if f.fvg_type == FVGType.BEARISH]
+        signal = None
+        score = 0
+        reasons = []
+        direction = None
 
-    # Liquidity
-    liq_zones = detect_liquidity_zones(df_ltf, ms.swing_highs, ms.swing_lows)
+        if htf.allows_long():
+            score = 1
+            reasons = ["HTF Bullish"]
+            direction = "LONG"
+            near_ob = next((o for o in bullish_obs if abs(current_price - o.midpoint) / current_price < 0.01), None)
+            if near_ob:
+                score += 1
+                reasons.append("Bullish OB")
+            near_fvg = next((f for f in bullish_fvgs if f.contains_price(current_price)), None)
+            if near_fvg:
+                score += 1
+                reasons.append("Bullish FVG")
+            for zone in liq_zones:
+                if zone.liq_type == LiquidityType.SELLSIDE:
+                    if check_liquidity_sweep(df_ltf, zone, lookback_candles=3):
+                        score += 1
+                        reasons.append("Sellside Sweep")
+                        break
 
-    # Sinyal skoru
-    signal = None
-    score = 0
-    reasons = []
-    direction = None
+        elif htf.allows_short():
+            score = 1
+            reasons = ["HTF Bearish"]
+            direction = "SHORT"
+            near_ob = next((o for o in bearish_obs if abs(current_price - o.midpoint) / current_price < 0.01), None)
+            if near_ob:
+                score += 1
+                reasons.append("Bearish OB")
+            near_fvg = next((f for f in bearish_fvgs if f.contains_price(current_price)), None)
+            if near_fvg:
+                score += 1
+                reasons.append("Bearish FVG")
+            for zone in liq_zones:
+                if zone.liq_type == LiquidityType.BUYSIDE:
+                    if check_liquidity_sweep(df_ltf, zone, lookback_candles=3):
+                        score += 1
+                        reasons.append("Buyside Sweep")
+                        break
 
-    if htf.allows_long():
-        score = 1
-        reasons = ["HTF Bullish"]
-        direction = "LONG"
+        if direction and score >= 2:
+            sl_dist = atr * 1.5
+            if direction == "LONG":
+                sl = current_price - sl_dist
+                tp = current_price + sl_dist * 2.0
+            else:
+                sl = current_price + sl_dist
+                tp = current_price - sl_dist * 2.0
+            rr = round(abs(tp - current_price) / abs(sl - current_price), 1)
+            signal = {
+                "symbol": symbol,
+                "direction": direction,
+                "price": round(current_price, 4),
+                "sl": round(sl, 4),
+                "tp": round(tp, 4),
+                "rr": rr,
+                "score": score,
+                "reasons": reasons,
+                "time": datetime.now(timezone.utc).strftime("%H:%M")
+            }
 
-        near_ob = next((o for o in bullish_obs if abs(current_price - o.midpoint) / current_price < 0.01), None)
-        if near_ob:
-            score += 1
-            reasons.append("Bullish OB")
-
-        near_fvg = next((f for f in bullish_fvgs if f.contains_price(current_price)), None)
-        if near_fvg:
-            score += 1
-            reasons.append("Bullish FVG")
-
-        for zone in liq_zones:
-            if zone.liq_type == LiquidityType.SELLSIDE:
-                if check_liquidity_sweep(df_ltf, zone, lookback_candles=3):
-                    score += 1
-                    reasons.append("Sellside Sweep")
-                    break
-
-    elif htf.allows_short():
-        score = 1
-        reasons = ["HTF Bearish"]
-        direction = "SHORT"
-
-        near_ob = next((o for o in bearish_obs if abs(current_price - o.midpoint) / current_price < 0.01), None)
-        if near_ob:
-            score += 1
-            reasons.append("Bearish OB")
-
-        near_fvg = next((f for f in bearish_fvgs if f.contains_price(current_price)), None)
-        if near_fvg:
-            score += 1
-            reasons.append("Bearish FVG")
-
-        for zone in liq_zones:
-            if zone.liq_type == LiquidityType.BUYSIDE:
-                if check_liquidity_sweep(df_ltf, zone, lookback_candles=3):
-                    score += 1
-                    reasons.append("Buyside Sweep")
-                    break
-
-    if direction and score >= 2:
-        sl_dist = atr * 1.5
-        if direction == "LONG":
-            sl = current_price - sl_dist
-            tp = current_price + sl_dist * 2.0
-        else:
-            sl = current_price + sl_dist
-            tp = current_price - sl_dist * 2.0
-
-        rr = round(abs(tp - current_price) / abs(sl - current_price), 1)
-
-        signal = {
+        return {
             "symbol": symbol,
-            "direction": direction,
             "price": round(current_price, 4),
-            "sl": round(sl, 4),
-            "tp": round(tp, 4),
-            "rr": rr,
-            "score": score,
-            "reasons": reasons,
-            "time": datetime.now(timezone.utc).strftime("%H:%M")
+            "bias": htf.bias.value,
+            "zone": htf.price_zone.value,
+            "ltf_bias": ms.bias.value,
+            "atr": round(atr, 4),
+            "bullish_obs": [{"top": round(o.top, 4), "bottom": round(o.bottom, 4)} for o in bullish_obs[-3:]],
+            "bearish_obs": [{"top": round(o.top, 4), "bottom": round(o.bottom, 4)} for o in bearish_obs[-3:]],
+            "bullish_fvgs": [{"top": round(f.top, 4), "bottom": round(f.bottom, 4)} for f in bullish_fvgs[-3:]],
+            "bearish_fvgs": [{"top": round(f.top, 4), "bottom": round(f.bottom, 4)} for f in bearish_fvgs[-3:]],
+            "signal": signal
         }
 
-    return {
-        "symbol": symbol,
-        "price": round(current_price, 4),
-        "bias": htf.bias.value,
-        "zone": htf.price_zone.value,
-        "ltf_bias": ms.bias.value,
-        "atr": round(atr, 4),
-        "bullish_obs": [{"top": round(o.top, 4), "bottom": round(o.bottom, 4)} for o in bullish_obs[-3:]],
-        "bearish_obs": [{"top": round(o.top, 4), "bottom": round(o.bottom, 4)} for o in bearish_obs[-3:]],
-        "bullish_fvgs": [{"top": round(f.top, 4), "bottom": round(f.bottom, 4)} for f in bullish_fvgs[-3:]],
-        "bearish_fvgs": [{"top": round(f.top, 4), "bottom": round(f.bottom, 4)} for f in bearish_fvgs[-3:]],
-        "signal": signal
-    }
+    except Exception as e:
+        logger.error(f"{symbol} analiz hatasi: {e}", exc_info=True)
+        return {}
 
 
 # ── Periyodik güncelleme ─────────────────────────────────────────────────────
