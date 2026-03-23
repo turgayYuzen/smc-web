@@ -57,8 +57,10 @@ def fetch_klines(symbol: str, interval: str, limit: int = 200) -> pd.DataFrame:
     url = "https://api.binance.com/api/v3/klines"
     try:
         resp = requests.get(url, params={"symbol": symbol, "interval": interval, "limit": limit}, timeout=10)
+        logger.info(f"Binance HTTP {resp.status_code} - {symbol} {interval}")
         raw = resp.json()
-        if not isinstance(raw, list):
+        if isinstance(raw, dict) and raw.get("code"):
+            logger.error(f"Binance hata: {raw}")
             return pd.DataFrame()
         df = pd.DataFrame(raw, columns=[
             "timestamp", "open", "high", "low", "close", "volume",
