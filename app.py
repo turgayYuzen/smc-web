@@ -54,7 +54,7 @@ state = {
 # ── Veri çekme ──────────────────────────────────────────────────────────────
 
 def fetch_klines(symbol: str, interval: str, limit: int = 200) -> pd.DataFrame:
-    url = "https://api.binance.com/api/v3/klines"
+    url = "https://data-api.binance.vision/api/v3/klines"
     try:
         resp = requests.get(url, params={"symbol": symbol, "interval": interval, "limit": limit}, timeout=10)
         logger.info(f"Binance HTTP {resp.status_code} - {symbol} {interval}")
@@ -80,7 +80,7 @@ def fetch_klines(symbol: str, interval: str, limit: int = 200) -> pd.DataFrame:
 def fetch_price(symbol: str) -> float:
     try:
         resp = requests.get(
-            "https://api.binance.com/api/v3/ticker/price",
+            "https://data-api.binance.vision/api/v3/ticker/price",
             params={"symbol": symbol}, timeout=5
         )
         return float(resp.json()["price"])
