@@ -100,7 +100,8 @@ def analyze_symbol(symbol: str) -> dict:
         if df_ltf.empty or df_htf.empty:
             logger.error(f"{symbol} veri bos geldi!")
             return {}
-
+        df_ltf = df_ltf.iloc[:-1]
+        df_htf = df_htf.iloc[:-1]
         current_price = df_ltf["close"].iloc[-1]
         atr = calculate_atr(df_ltf)
 
